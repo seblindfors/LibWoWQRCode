@@ -1,0 +1,68 @@
+name: Build LibWoWQRCode
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download qrencode.lua
+        run: |
+          echo "[Step] Downloading qrencode.lua"
+          curl -o qrencode.lua https://raw.githubusercontent.com/speedata/luaqrcode/master/qrencode.lua
+
+      - name: Get revision number
+        id: rev
+        run: |
+          echo "[Step] Getting revision number (commit count)"
+          echo "rev=$(git rev-list --count HEAD)" >> $GITHUB_OUTPUT
+          echo "REV=$(git rev-list --count HEAD)" >> $GITHUB_ENV
+
+      - name: Generate LibWoWQRCode.lua
+        env:
+          REV: ${{ env.REV }}
+        run: |
+          echo "[Step] Generating LibWoWQRCode.lua from wrapper and qrencode.lua"
+          echo "Preparing wrapper..."
+          cp .github/workflows/wrapper.lua LibWoWQRCode.lua
+          echo "Clean up qrencode.lua: remove comments after copyright block (in-place)..."
+          awk '
+            BEGIN {copy=1}
+            /^[ \t]*--/ {if(copy) print; next}
+            /^$/ {if(copy){print; copy=0; next}}
+            {if(!copy && $0 !~ /^[ \t]*--/) print}
+          ' qrencode.lua > qrencode.tmp && mv qrencode.tmp qrencode.lua
+          echo "Collapse multiple empty lines to a single empty line in qrencode.lua..."
+          awk 'NF{p=0} !NF{if(p) next; p=1} 1' qrencode.lua > qrencode.tmp && mv qrencode.tmp qrencode.lua
+          echo "Injecting qrencode.lua into LibWoWQRCode.lua..."
+          sed -i '/--\[\[QRENCODE_PLACEHOLDER\]\]/ {
+            r qrencode.lua
+            d
+          }' LibWoWQRCode.lua
+          echo "Substituting revision number for MINOR version..."
+          sed -i "s/__REV__/$REV/g" LibWoWQRCode.lua
+          echo "Trim trailing whitespace from all lines..."
+          sed -i 's/[ \t]*$//' LibWoWQRCode.lua
+          rm qrencode.lua
+
+      - name: Commit and push LibWoWQRCode.lua
+        env:
+          REV: ${{ env.REV }}
+        run: |
+          echo "[Step] Committing and pushing LibWoWQRCode.lua"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add LibWoWQRCode.lua
+          git commit -m "Build: Revision $REV"
+          git push
