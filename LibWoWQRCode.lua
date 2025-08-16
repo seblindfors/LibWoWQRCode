@@ -5,7 +5,7 @@
 -- Website: https://github.com/seblindfors/LibWoWQRCode
 
 local MAJOR = 'LibWoWQRCode'
-local MINOR = 5
+local MINOR = 1
 if not LibStub then error(MAJOR .. ' requires LibStub.') end
 local QR = LibStub:NewLibrary(MAJOR, MINOR)
 if not QR then return end;
